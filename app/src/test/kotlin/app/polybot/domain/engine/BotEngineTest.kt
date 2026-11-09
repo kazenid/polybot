@@ -296,7 +296,7 @@ class BotEngineTest {
         assertEquals(20L, engine.pollDelaySec())
         engine.tick()
         tickAfter(1)
-        assertEquals(5L, engine.pollDelaySec())
+        assertEquals(3L, engine.pollDelaySec())
     }
 
     @Test

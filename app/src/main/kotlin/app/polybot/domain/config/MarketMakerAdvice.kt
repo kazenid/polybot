@@ -17,9 +17,9 @@ object MarketMakerProfiles {
     private class Params(val requote: String, val maxAgeSec: Int, val maxInventory: String, val skew: String, val cooldownSec: Int, val trendHold: String)
 
     private fun params(profile: MmProfile) = when (profile) {
-        MmProfile.CAUTIOUS -> Params("10", 60, "0.6", "0.5", 8, "15")
-        MmProfile.BALANCED -> Params("8", 60, "0.8", "0.5", 5, "20")
-        MmProfile.AGGRESSIVE -> Params("6", 45, "0.9", "0.4", 4, "30")
+        MmProfile.CAUTIOUS -> Params("10", 180, "0.6", "0.5", 8, "60")
+        MmProfile.BALANCED -> Params("8", 120, "0.8", "0.5", 5, "80")
+        MmProfile.AGGRESSIVE -> Params("6", 90, "0.9", "0.4", 4, "100")
     }
 
     /** Jarak kuotasi profil = batas aman (fee + margin) ditambah selisih tetap, jadi ikut bergeser bila fee diubah. */
@@ -105,14 +105,18 @@ object MarketMakerAdvice {
 
     /** Peringatan singkat per kolom untuk nilai yang masuk akal secara angka tetapi hampir pasti merugikan. */
     fun check(config: MarketMakerConfig): Map<Field, String> = buildMap {
-        val floor = config.makerFeeBps.add(config.minNetEdgeBps)
-        if (config.halfSpreadBps < floor) put(Field.HALF_SPREAD, "Di bawah fee + margin (${plain(floor)} bps), dipakai ${plain(floor)} bps")
+        val floor = config.safeHalfSpreadBps
+        if (config.halfSpreadBps < MarketMakerConfig.MIN_HALF_SPREAD_BPS) {
+            put(Field.HALF_SPREAD, "Di bawah batas mutlak ${plain(MarketMakerConfig.MIN_HALF_SPREAD_BPS)} bps, dipakai ${plain(MarketMakerConfig.MIN_HALF_SPREAD_BPS)} bps")
+        } else if (config.halfSpreadBps < floor) {
+            put(Field.HALF_SPREAD, "Di bawah fee + margin (${plain(floor)} bps): margin bersih per putaran menipis atau rugi")
+        }
         if (config.makerFeeBps.signum() <= 0) put(Field.FEE, "Fee 0 membuat bot menghitung seolah tanpa biaya. Testnet saat ini 10 bps")
         if (config.minNetEdgeBps.signum() <= 0) put(Field.MARGIN, "Tanpa margin, satu putaran paling banter impas setelah fee")
         if (config.requoteThresholdBps >= config.effectiveHalfSpreadBps) {
             put(Field.REQUOTE, "Lebih besar dari jarak kuotasi: order bisa terisi sebelum sempat dibatalkan")
         }
-        if (config.maxOrderAgeSec < 15) put(Field.ORDER_AGE, "Terlalu singkat: order terus diganti sebelum sempat terisi")
+        if (config.maxOrderAgeSec < 15) put(Field.ORDER_AGE, "Terlalu singkat: order sering diperiksa ulang tanpa perlu")
         if (config.cooldownSec < 2) put(Field.COOLDOWN, "Terlalu rapat: banyak permintaan ke server dan mudah kena batas laju")
         if (config.trendHoldBps < BigDecimal(5)) put(Field.TREND_HOLD, "Terlalu sensitif: beli sering ditahan oleh gerak harga kecil")
     }

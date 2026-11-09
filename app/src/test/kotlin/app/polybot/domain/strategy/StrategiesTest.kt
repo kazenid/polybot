@@ -86,12 +86,12 @@ class StrategiesTest {
     }
 
     @Test
-    fun `half spread never goes below fee plus the minimum edge`() {
+    fun `half spread never goes below the absolute minimum`() {
         val cfg = mmConfig.copy(marketMaker = MarketMakerConfig(halfSpreadBps = d("5")))
         val snapshot = testSnapshot(quoteTotal = "9250", baseTotal = base75)
         val buy = places(MarketMaker().decide(snapshot, cfg)).single { it.side == Side.BUY }
         val belowBps = snapshot.mid!!.subtract(buy.price).divide(snapshot.mid, 8, java.math.RoundingMode.HALF_UP).multiply(d("10000"))
-        assertTrue(belowBps >= d("19.9"), "fee 10 + margin 10 = 20 bps, was $belowBps")
+        assertTrue(belowBps >= d("9.9") && belowBps < d("15"), "lantai mutlak 10 bps, was $belowBps")
     }
 
     @Test
@@ -167,7 +167,8 @@ class StrategiesTest {
         val falling = testSnapshot(
             bid = "76690.00", ask = "76690.02", quoteTotal = "9100", baseTotal = "0.01173300", now = t0 + 60_000,
         )
-        val intents = places(mm.decide(falling, mmConfig))
+        val sensitive = mmConfig.copy(marketMaker = MarketMakerConfig(trendHoldBps = d("20")))
+        val intents = places(mm.decide(falling, sensitive))
         assertTrue(intents.none { it.side == Side.BUY }, "beli ditahan saat tren turun")
         assertTrue(intents.any { it.side == Side.SELL })
     }
@@ -181,11 +182,20 @@ class StrategiesTest {
     }
 
     @Test
-    fun `orders older than the maximum age are cancelled`() {
+    fun `old orders whose price is still ideal are kept`() {
         val mm = MarketMaker()
         mm.decide(testSnapshot(quoteTotal = "9250", baseTotal = base75, now = t0), mmConfig)
         val open = listOf(ourOrder(Side.BUY, idealBid, createdAtMs = t0))
-        val old = testSnapshot(quoteTotal = "9250", baseTotal = base75, now = t0 + 61_000, open = open)
+        val old = testSnapshot(quoteTotal = "9250", baseTotal = base75, now = t0 + 121_000, open = open)
+        assertEquals(emptyList<Intent>(), mm.decide(old, mmConfig).filterIsInstance<Intent.Cancel>())
+    }
+
+    @Test
+    fun `orders older than the maximum age are cancelled when the ideal price changed`() {
+        val mm = MarketMaker()
+        mm.decide(testSnapshot(quoteTotal = "9250", baseTotal = base75, now = t0), mmConfig)
+        val open = listOf(ourOrder(Side.BUY, "76800.00", createdAtMs = t0))
+        val old = testSnapshot(quoteTotal = "9250", baseTotal = base75, now = t0 + 121_000, open = open)
         val cancel = mm.decide(old, mmConfig).single() as Intent.Cancel
         assertTrue(cancel.reason.contains("berumur"))
     }
@@ -194,12 +204,12 @@ class StrategiesTest {
     fun `cooldown prevents requoting right after a cancel`() {
         val mm = MarketMaker()
         mm.decide(testSnapshot(quoteTotal = "9250", baseTotal = base75, now = t0), mmConfig)
-        val open = listOf(ourOrder(Side.BUY, idealBid, createdAtMs = t0))
-        mm.decide(testSnapshot(now = t0 + 61_000, open = open, quoteTotal = "9250", baseTotal = base75), mmConfig)
+        val open = listOf(ourOrder(Side.BUY, "76800.00", createdAtMs = t0))
+        mm.decide(testSnapshot(now = t0 + 121_000, open = open, quoteTotal = "9250", baseTotal = base75), mmConfig)
 
-        val justAfter = testSnapshot(now = t0 + 62_000, quoteTotal = "9250", baseTotal = base75)
+        val justAfter = testSnapshot(now = t0 + 122_000, quoteTotal = "9250", baseTotal = base75)
         assertEquals(emptyList<Intent>(), mm.decide(justAfter, mmConfig), "dalam cooldown 5 detik")
-        assertTrue(mm.decide(justAfter.copy(nowMs = t0 + 67_000), mmConfig).isNotEmpty())
+        assertTrue(mm.decide(justAfter.copy(nowMs = t0 + 127_000), mmConfig).isNotEmpty())
     }
 
     // ---- Lantai jual impas ----

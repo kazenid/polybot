@@ -90,8 +90,10 @@ fun StrategyScreen(viewModel: ConfigViewModel = hiltViewModel(), priceViewModel:
         }
 
         InfoCard("Umum") {
-            IntField("Polling saat ada order (detik)", config.pollActiveSec, { v -> viewModel.update { it.copy(pollActiveSec = v) } })
-            IntField("Polling saat idle (detik)", config.pollIdleSec, { v -> viewModel.update { it.copy(pollIdleSec = v) } })
+            IntField("Polling saat ada order (detik)", config.pollActiveSec, { v -> viewModel.update { it.copy(pollActiveSec = v) } },
+                hint = "3 detik direkomendasikan — makin cepat, makin cepat requote saat harga bergerak")
+            IntField("Polling saat idle (detik)", config.pollIdleSec, { v -> viewModel.update { it.copy(pollIdleSec = v) } },
+                hint = "15–30 detik cukup saat tidak ada order aktif")
             SwitchRow(
                 "Batalkan order saat berhenti, jeda, atau error", config.cancelOnStop,
                 { v -> viewModel.update { it.copy(cancelOnStop = v) } },

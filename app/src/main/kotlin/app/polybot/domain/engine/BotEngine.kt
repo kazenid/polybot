@@ -269,7 +269,8 @@ class BotEngine(
                         is SubmitOutcome.Accepted -> {
                             placed += intent
                             riskState.recordOrder(clock.nowMs())
-                            log.info("order", "[$tag] ${intent.side} ${market.symbol} ${intent.qty.toPlainString()} @ ${intent.price.toPlainString()} (${intent.note}) -> ${out.order.clientOrderId}")
+                            val midStr = snapshot.mid?.toPlainString() ?: "?"
+                            log.info("order", "[$tag] ${intent.side} ${market.symbol} ${intent.qty.toPlainString()} @ ${intent.price.toPlainString()} mid=$midStr (${intent.note}) -> ${out.order.clientOrderId}")
                         }
                         is SubmitOutcome.Rejected -> {
                             if (out.error is ApiError.Auth) throw out.error

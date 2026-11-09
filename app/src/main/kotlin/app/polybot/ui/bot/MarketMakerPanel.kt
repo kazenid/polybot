@@ -191,7 +191,7 @@ private fun ProfileCard(mm: MarketMakerConfig, onPick: (MmProfile) -> Unit) {
 @Composable
 private fun SpreadSlider(mm: MarketMakerConfig, price: PriceInfo?, warning: String?, onChange: (BigDecimal) -> Unit) {
     val effective = mm.effectiveHalfSpreadBps
-    val floor = mm.makerFeeBps.add(mm.minNetEdgeBps)
+    val floor = mm.safeHalfSpreadBps
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Jarak kuotasi dari harga tengah", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -366,7 +366,7 @@ private fun AdvancedCard(mm: MarketMakerConfig, quote: String, warnings: Map<Fie
             IntField(
                 "Umur order maksimum (detik)", mm.maxOrderAgeSec, { v -> change { it.copy(maxOrderAgeSec = v) } },
                 warning = warnings[Field.ORDER_AGE],
-                help = FieldHelp("Umur order maksimum", "Order yang lebih tua dari ini dibatalkan lalu dipasang ulang di harga terbaru. Pembatalan tidak kena fee.", range = "45 sampai 90 detik."),
+                help = FieldHelp("Umur order maksimum", "Order yang lebih tua dari ini dibatalkan dan dipasang ulang hanya bila harga idealnya sudah berubah. Bila pasar diam dan harganya masih pas, order dibiarkan agar posisi antrean tidak hilang. Pembatalan tidak kena fee.", range = "60 sampai 300 detik. Di pasar sepi pilih lebih lama."),
             )
             IntField(
                 "Cooldown (detik)", mm.cooldownSec, { v -> change { it.copy(cooldownSec = v) } },
@@ -406,7 +406,7 @@ private fun AdvancedCard(mm: MarketMakerConfig, quote: String, warnings: Map<Fie
                 help = FieldHelp(
                     "Tahan beli saat turun",
                     "Bila inventori sudah bertambah sejak sesi dimulai dan harga turun sebesar ini dari puncak jendela tren, bot berhenti memasang order beli sampai kondisi pulih. Sisi jual tetap jalan.",
-                    range = "15 sampai 30 bps.",
+                    range = "50 sampai 100 bps. Di bawah 30 bps terlalu sensitif untuk crypto volatile dan sering memblokir order beli.",
                 ),
             )
         }

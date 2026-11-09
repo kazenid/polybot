@@ -74,10 +74,10 @@ class MarketMakerAdviceTest {
     }
 
     @Test
-    fun `a spread below the floor is lifted before computing the round trip`() {
+    fun `a spread below the absolute minimum is lifted before computing the round trip`() {
         val rt = MarketMakerAdvice.roundTrip(MarketMakerConfig(halfSpreadBps = d("5")), null)
-        assertDec("20", rt.halfSpreadBps)
-        assertDec("20", rt.netBps)
+        assertDec("10", rt.halfSpreadBps)
+        assertDec("0", rt.netBps)
         assertNull(rt.buyPrice)
     }
 
@@ -105,7 +105,9 @@ class MarketMakerAdviceTest {
             ),
         )
         assertEquals(MarketMakerAdvice.Field.entries.toSet() - MarketMakerAdvice.Field.HALF_SPREAD, warnings.keys - MarketMakerAdvice.Field.HALF_SPREAD)
-        assertTrue(MarketMakerAdvice.check(MarketMakerConfig(halfSpreadBps = d("15"))).getValue(MarketMakerAdvice.Field.HALF_SPREAD).contains("dipakai 20"))
+        assertTrue(MarketMakerAdvice.check(MarketMakerConfig(halfSpreadBps = d("15"))).getValue(MarketMakerAdvice.Field.HALF_SPREAD).contains("fee + margin"))
+        assertTrue(MarketMakerAdvice.check(MarketMakerConfig(halfSpreadBps = d("5"))).getValue(MarketMakerAdvice.Field.HALF_SPREAD).contains("dipakai 10"))
+        assertNull(MarketMakerAdvice.check(MarketMakerConfig(halfSpreadBps = d("20"))).get(MarketMakerAdvice.Field.HALF_SPREAD))
     }
 
     // ---- ringkasan ----

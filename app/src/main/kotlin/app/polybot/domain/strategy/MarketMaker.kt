@@ -15,7 +15,9 @@ import java.math.RoundingMode
  *
  * - **Skew netral**: inventori dinilai relatif terhadap posisi saat sesi dimulai ([anchor]), bukan target tetap.
  *   Bertambahnya inventori menggeser kuotasi turun (lebih mudah menjual); berkurangnya menggesernya naik.
- * - **Half spread minimum**: tidak pernah di bawah fee maker + margin bersih ([MarketMakerConfig.effectiveHalfSpreadBps]).
+ * - **Half spread minimum**: tidak pernah di bawah [MarketMakerConfig.MIN_HALF_SPREAD_BPS]; di bawah fee + margin
+ *   ([MarketMakerConfig.safeHalfSpreadBps]) diizinkan tetapi UI memberi peringatan.
+ * - **Umur order**: order lama hanya dibatalkan bila harganya sudah menyimpang dari kuotasi ideal.
  * - **Requote asimetris**: order yang menjadi lebih agresif dari kuotasi ideal (berbahaya, mudah tersambar) dibatalkan
  *   pada ambang kecil; order yang menjadi lebih jauh (aman) dibiarkan sampai ambang 3x, sehingga antrean tidak terus hilang.
  * - **Sisi yang kosong dipasang sendiri** setelah cooldown, tanpa menunggu sisi lain.
@@ -34,6 +36,9 @@ class MarketMaker : Strategy {
     override fun decide(snapshot: Snapshot, config: BotConfig): List<Intent> {
         val cfg = config.marketMaker
         val mid = snapshot.mid ?: return emptyList()
+        // Jangan pasang order jika tidak ada book segar — mid dari lastPrice saja tidak cukup
+        // karena lastPrice bisa sangat lama saat book Polyester testnet sedang tipis.
+        if (snapshot.bestBid == null || snapshot.bestAsk == null) return emptyList()
         val fraction = snapshot.inventoryFraction
         val start = anchor ?: fraction.also { anchor = it }
         recordMid(snapshot.nowMs, mid, cfg.trendWindowSec)
@@ -118,9 +123,13 @@ class MarketMaker : Strategy {
     }
 
     private fun staleReason(order: LocalOrder, ideal: IdealQuotes, nowMs: Long, cfg: MarketMakerConfig): String? {
-        if (nowMs - order.createdAtMs > cfg.maxOrderAgeSec * 1_000L) return "requote: order berumur > ${cfg.maxOrderAgeSec}s"
         val price = Numeric.ticksToPrice(order.priceTicks)
         val target = ideal.nearest(order.side, price)
+        // Umur hanya membatalkan order yang harganya sudah tidak sama dengan kuotasi ideal. Bila pasar diam dan
+        // harganya masih pas, dibiarkan agar posisi antrean tidak hilang.
+        if (nowMs - order.createdAtMs > cfg.maxOrderAgeSec * 1_000L && price.compareTo(target) != 0) {
+            return "requote: order berumur > ${cfg.maxOrderAgeSec}s dan harga ideal berubah"
+        }
         if (target.signum() <= 0) return null
         // + berarti order lebih agresif (lebih dekat ke pasar) dari kuotasi ideal.
         val diff = if (order.side == Side.BUY) price.subtract(target) else target.subtract(price)

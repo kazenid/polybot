@@ -51,7 +51,7 @@ data class MarketMakerConfig(
     val levels: Int = 1,
     @Serializable(with = BigDecimalSerializer::class) val levelStepBps: BigDecimal = BigDecimal("10"),
     @Serializable(with = BigDecimalSerializer::class) val requoteThresholdBps: BigDecimal = BigDecimal("8"),
-    val maxOrderAgeSec: Int = 60,
+    val maxOrderAgeSec: Int = 120,
     /**
      * Bagian dari batas eksposur (RiskConfig.maxExposurePct) di mana sisi beli mulai ditahan; sisi jual ditahan
      * di bawah (1 - nilai ini). Inventori target = separuh batas eksposur.
@@ -66,15 +66,21 @@ data class MarketMakerConfig(
     @Serializable(with = BigDecimalSerializer::class) val minNetEdgeBps: BigDecimal = BigDecimal("10"),
     /** Jendela pengamatan tren (detik). Beli ditahan bila harga turun sebesar [trendHoldBps] dari puncak jendela. */
     val trendWindowSec: Int = 300,
-    @Serializable(with = BigDecimalSerializer::class) val trendHoldBps: BigDecimal = BigDecimal("20"),
+    @Serializable(with = BigDecimalSerializer::class) val trendHoldBps: BigDecimal = BigDecimal("80"),
     /**
      * Jual tidak pernah di bawah titik impas: biaya pembelian terbaru yang belum terjual + fee beli dan jual +
      * [minNetEdgeBps]. Tanpa ini, penutupan posisi saat harga turun merealisasi rugi yang dimakan fee dua kali.
      */
     val sellAboveCost: Boolean = true,
 ) {
-    /** Half spread yang benar-benar dipakai: pengaturan pengguna, tetapi tidak di bawah fee + margin minimum. */
-    val effectiveHalfSpreadBps: BigDecimal get() = halfSpreadBps.max(makerFeeBps.add(minNetEdgeBps))
+    /**
+     * Half spread yang benar-benar dipakai: pengaturan pengguna, tetapi tidak di bawah [MIN_HALF_SPREAD_BPS].
+     * Di bawah fee + margin ([safeHalfSpreadBps]) masih diizinkan; UI memberi peringatan.
+     */
+    val effectiveHalfSpreadBps: BigDecimal get() = halfSpreadBps.max(MIN_HALF_SPREAD_BPS)
+
+    /** Half spread yang menutup fee maker + margin bersih minimum. */
+    val safeHalfSpreadBps: BigDecimal get() = makerFeeBps.add(minNetEdgeBps)
 
     /**
      * Harga jual impas untuk lot berbiaya [lotCost]: hasil jual setelah fee maker harus menutup biaya
@@ -86,8 +92,11 @@ data class MarketMakerConfig(
         return lotCost.multiply(BigDecimal.ONE.add(f).add(m)).divide(BigDecimal.ONE.subtract(f), 12, java.math.RoundingMode.HALF_UP)
     }
 
-    private companion object {
-        val BPS: BigDecimal = BigDecimal(10_000)
+    companion object {
+        private val BPS: BigDecimal = BigDecimal(10_000)
+
+        /** Lantai mutlak jarak kuotasi (bps); nilai lebih kecil dinaikkan ke sini. */
+        val MIN_HALF_SPREAD_BPS: BigDecimal = BigDecimal(10)
     }
 }
 
@@ -123,7 +132,7 @@ data class BotConfig(
      * sesi dry run selalu boleh dilanjutkan, sesi live butuh persetujuan eksplisit ini.
      */
     val autoResumeLive: Boolean = false,
-    val pollActiveSec: Int = 5,
+    val pollActiveSec: Int = 3,
     val pollIdleSec: Int = 20,
     val risk: RiskConfig = RiskConfig(),
     val marketMaker: MarketMakerConfig = MarketMakerConfig(),
